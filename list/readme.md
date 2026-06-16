@@ -1,0 +1,1 @@
+khusus folder file wasm
