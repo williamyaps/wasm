@@ -1,214 +1,190 @@
 <!DOCTYPE html>
-<html>
+<html lang="id">
 <head>
-<meta charset="UTF-8">
-<title>WASM Loader V3 — Decryptor (URL Mode)</title>
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{background:#090d09;color:#4afa7a;font-family:'Courier New',monospace;padding:24px;font-size:14px;display:flex;align-items:center;justify-content:center;min-height:100vh}
-.box{width:100%;max-width:550px;background:#0c130c;padding:28px;border:1px solid #1d451d;border-radius:3px;box-shadow:0 10px 30px rgba(0,0,0,0.5)}
-h2{font-size:1.05em;color:#7cff9c;margin-bottom:20px;text-align:center;letter-spacing:1px}
-label{display:block;margin:14px 0 4px;font-size:.75em;opacity:.55;text-transform:uppercase;letter-spacing:.06em}
-input[type=text],input[type=password]{
-  width:100%;background:#0a100a;color:#4afa7a;
-  border:1px solid #1d451d;padding:12px;
-  font-family:inherit;font-size:.9em;outline:none;margin-bottom:10px
-}
-input:focus{border-color:#4afa7a}
-input::placeholder{opacity:.4}
-button{
-  width:100%;background:#4afa7a;color:#000;padding:12px;
-  border:none;cursor:pointer;font-family:inherit;
-  font-weight:bold;font-size:.9em;margin-top:10px;border-radius:2px;
-  transition: background 0.2s
-}
-button:hover{background:#7cff9c}
-button:disabled{opacity:0.3;cursor:not-allowed}
-#status{
-  margin-top:20px;padding:10px;font-size:0.8em;
-  border-top:1px solid #1d451d;display:none;
-  white-space:pre-wrap;line-height:1.5
-}
-.err{color:#ff5555}.ok{color:#4afa7a}.w{color:#ffc044}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔒 Dokumen Terproteksi</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            background: #0f172a;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+        .lock-box {
+            background: #1e293b;
+            border-radius: 28px;
+            padding: 40px;
+            max-width: 400px;
+            text-align: center;
+            border: 1px solid #334155;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+        }
+        input {
+            width: 100%;
+            padding: 12px;
+            margin: 20px 0;
+            background: #0f172a;
+            border: 1px solid #475569;
+            border-radius: 40px;
+            color: white;
+            font-size: 16px;
+            text-align: center;
+        }
+        button {
+            background: #10b981;
+            color: #06291e;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 40px;
+            font-weight: bold;
+            cursor: pointer;
+            width: 100%;
+            font-size: 16px;
+            transition: 0.2s;
+        }
+        button:hover { background: #059669; }
+        .error {
+            color: #f87171;
+            margin-top: 12px;
+            font-size: 14px;
+        }
+        #toastMsg {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #ef4444;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 50px;
+            font-weight: 600;
+            font-size: 14px;
+            display: none;
+            z-index: 99999;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 </head>
 <body>
-
-<div class="box" id="mainBox">
-  <h2>🔓 WASM DECRYPTOR V3 — URL MODE</h2>
-  
-  <label>WASM URL (GitHub raw link / any HTTPS)</label>
-  <input type="text" id="wasmUrl" placeholder="https://raw.githubusercontent.com/.../file.wasm" value="">
-
-  <label>Password</label>
-  <input type="password" id="pwd" placeholder="Masukkan password dekripsi...">
-
-  <button id="btn">🔓 Unlock & Run</button>
-
-  <div id="status"></div>
+<div id="toastMsg">❌ Menyimpan halaman tidak diizinkan.</div>
+<div class="lock-box" id="lockDiv">
+    <h2>🔐 MASUKKAN PASSWORD</h2>
+    <input type="password" id="passwordInput" placeholder="Password Sistem" autofocus>
+    <button id="unlockBtn">BUKA DASHBOARD</button>
+    <div id="errorMsg" class="error"></div>
 </div>
 
 <script>
-/* ══════════════════════════════════════════════════════
-   SHA3-256 Implementation (Must match Packer)
-   ══════════════════════════════════════════════════════ */
-function sha3_256(data) {
-  const RC = [0x0000000000000001n,0x0000000000008082n,0x800000000000808An,0x8000000080008000n,0x000000000000808Bn,0x0000000080000001n,0x8000000080008081n,0x8000000000008009n,0x000000000000008An,0x0000000000000088n,0x0000000080008009n,0x000000008000000An,0x000000008000808Bn,0x800000000000008Bn,0x8000000000008089n,0x8000000000008003n,0x8000000000008002n,0x8000000000000080n,0x000000000000800An,0x800000008000000An,0x8000000080008081n,0x8000000000008080n,0x0000000080000001n,0x8000000080008008n];
-  const RHO = [0,1,62,28,27,36,44,6,55,20,3,10,43,25,39,41,45,15,21,8,18,2,61,56,14];
-  const M = 0xFFFFFFFFFFFFFFFFn;
-  function rot64(v, n) { return ((v << BigInt(n)) | (v >> BigInt(64-n))) & M; }
-  function keccakF(A) {
-    for (let r = 0; r < 24; r++) {
-      const C = new BigUint64Array(5);
-      for (let x = 0; x < 5; x++) C[x] = A[x]^A[x+5]^A[x+10]^A[x+15]^A[x+20];
-      const D = new BigUint64Array(5);
-      for (let x = 0; x < 5; x++) D[x] = C[(x+4)%5] ^ rot64(C[(x+1)%5], 1);
-      for (let i = 0; i < 25; i++) A[i] ^= D[i % 5];
-      const B = new BigUint64Array(25);
-      for (let x = 0; x < 5; x++) for (let y = 0; y < 5; y++) B[y + 5*((2*x + 3*y) % 5)] = rot64(A[x + 5*y], RHO[x + 5*y]);
-      for (let y = 0; y < 5; y++) {
-        const r5 = 5 * y; const [b0,b1,b2,b3,b4] = [B[r5],B[r5+1],B[r5+2],B[r5+3],B[r5+4]];
-        A[r5]=b0^((~b1&M)&b2); A[r5+1]=b1^((~b2&M)&b3); A[r5+2]=b2^((~b3&M)&b4); A[r5+3]=b3^((~b4&M)&b0); A[r5+4]=b4^((~b0&M)&b1);
-      }
-      A[0] ^= RC[r];
-    }
-  }
-  const RATE = 136;
-  const padLen = RATE - (data.length % RATE);
-  const msg = new Uint8Array(data.length + padLen);
-  msg.set(data); msg[data.length] = 0x06; msg[msg.length - 1] |= 0x80;
-  const A = new BigUint64Array(25);
-  const dv = new DataView(msg.buffer);
-  for (let off = 0; off < msg.length; off += RATE) {
-    for (let j = 0; j < 17; j++) A[j] ^= dv.getBigUint64(off + j * 8, true);
-    keccakF(A);
-  }
-  const out = new Uint8Array(32);
-  const ov = new DataView(out.buffer);
-  for (let i = 0; i < 4; i++) ov.setBigUint64(i * 8, A[i] & M, true);
-  return out;
-}
+    const encryptedB64 = "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";
 
-/* ══════════════════════════════════════════════════════
-   ChaCha20 Implementation (Must match Packer)
-   ══════════════════════════════════════════════════════ */
-function chacha20(key, nonce, data, ctr = 0) {
-  function rotl(v, n) { return (v << n | v >>> (32 - n)) >>> 0; }
-  function qr(s, a, b, c, d) {
-    s[a]=(s[a]+s[b])>>>0; s[d]=rotl(s[d]^s[a],16);
-    s[c]=(s[c]+s[d])>>>0; s[b]=rotl(s[b]^s[c],12);
-    s[a]=(s[a]+s[b])>>>0; s[d]=rotl(s[d]^s[a], 8);
-    s[c]=(s[c]+s[d])>>>0; s[b]=rotl(s[b]^s[c], 7);
-  }
-  const kv = new DataView(key.buffer, key.byteOffset);
-  const nv = new DataView(nonce.buffer, nonce.byteOffset);
-  const out = new Uint8Array(data.length);
-  for (let i = 0; i < data.length; i += 64) {
-    const s0 = new Uint32Array([0x61707865, 0x3320646e, 0x79622d32, 0x6b206574, kv.getUint32(0,true), kv.getUint32(4,true), kv.getUint32(8,true), kv.getUint32(12,true), kv.getUint32(16,true), kv.getUint32(20,true), kv.getUint32(24,true), kv.getUint32(28,true), (ctr + Math.floor(i / 64)) >>> 0, nv.getUint32(0,true), nv.getUint32(4,true), nv.getUint32(8,true)]);
-    const s = new Uint32Array(s0);
-    for (let r = 0; r < 10; r++) { qr(s,0,4,8,12); qr(s,1,5,9,13); qr(s,2,6,10,14); qr(s,3,7,11,15); qr(s,0,5,10,15); qr(s,1,6,11,12); qr(s,2,7,8,13); qr(s,3,4,9,14); }
-    const ks = new Uint8Array(64); const ksv = new DataView(ks.buffer);
-    for (let k = 0; k < 16; k++) ksv.setUint32(k * 4, (s[k] + s0[k]) >>> 0, true);
-    const n = Math.min(64, data.length - i);
-    for (let j = 0; j < n; j++) out[i + j] = data[i + j] ^ ks[j];
-  }
-  return out;
-}
-
-/* ══════════════════════════════════════════════════════
-   Main Logic — Fetch from URL
-   ══════════════════════════════════════════════════════ */
-const statusEl = document.getElementById('status');
-const btn = document.getElementById('btn');
-
-function log(msg, cls='') {
-  statusEl.style.display = 'block';
-  statusEl.innerHTML += `<div class="${cls}">${msg}</div>`;
-}
-
-btn.onclick = async () => {
-  const wasmUrl = document.getElementById('wasmUrl').value.trim();
-  const pwd = document.getElementById('pwd').value;
-
-  if (!wasmUrl) { alert('Masukkan URL file .wasm!'); return; }
-  if (!pwd) { alert('Masukkan password dekripsi!'); return; }
-
-  statusEl.innerHTML = '';
-  btn.disabled = true;
-
-  try {
-    log('⏳ Fetching WASM from: ' + wasmUrl);
-    const wasmResponse = await fetch(wasmUrl);
-    if (!wasmResponse.ok) throw new Error(`HTTP ${wasmResponse.status} — Gagal fetch WASM`);
-    const wasmBuffer = await wasmResponse.arrayBuffer();
-    
-    log('✅ WASM fetched, size: ' + wasmBuffer.byteLength + ' bytes', 'ok');
-    log('🔧 Instantiating WebAssembly...');
-    
-    const { instance } = await WebAssembly.instantiate(wasmBuffer);
-    
-    // 2. Extract Payload from WASM Memory
-    const totalLen = instance.exports.len();
-    const fullPayload = new Uint8Array(instance.exports.mem.buffer, 0, totalLen);
-    
-    // Layout: [salt(32)][chachaNonce(12)][aesIV(12)][sha3hash(32)][ciphertext(N)]
-    const salt        = fullPayload.slice(0, 32);
-    const chachaNonce = fullPayload.slice(32, 44);
-    const aesIV       = fullPayload.slice(44, 56);
-    const expectedSha3 = fullPayload.slice(56, 88);
-    const ciphertext  = fullPayload.slice(88);
-
-    log('🔑 Deriving keys (PBKDF2 600k)...', 'w');
-    const enc = new TextEncoder();
-    const km = await crypto.subtle.importKey('raw', enc.encode(pwd), 'PBKDF2', false, ['deriveBits']);
-    const derived = new Uint8Array(await crypto.subtle.deriveBits(
-      { name:'PBKDF2', salt, iterations:600_000, hash:'SHA-512' }, km, 512
-    ));
-    
-    const chachaKey = derived.slice(0, 32);
-    const aesKeyRaw = derived.slice(32, 64);
-
-    // 3. Layer 2 Decrypt: AES-GCM
-    log('🔓 Decrypting Layer 2 (AES-GCM)...');
-    const aesKey = await crypto.subtle.importKey(
-      'raw', aesKeyRaw, { name:'AES-GCM', length:256 }, false, ['decrypt']
-    );
-    
-    let intermediate;
-    try {
-      intermediate = new Uint8Array(await crypto.subtle.decrypt(
-        { name:'AES-GCM', iv:aesIV }, aesKey, ciphertext
-      ));
-    } catch(e) {
-      throw new Error("Password salah atau data korup (AES Fail)");
+    function base64ToBytes(base64) {
+        const binary = atob(base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        return bytes;
     }
 
-    // 4. Layer 1 Decrypt: ChaCha20
-    log('🔓 Decrypting Layer 1 (ChaCha20)...');
-    const plaintext = chacha20(chachaKey, chachaNonce, intermediate);
+    async function decryptAndShow(password) {
+        try {
+            const data = base64ToBytes(encryptedB64);
+            const salt = data.slice(0, 16);
+            const iv = data.slice(16, 28);
+            const ciphertext = data.slice(28);
 
-    // 5. Integrity Check: SHA3-256
-    log('🛡️ Verifying Integrity (SHA3)...');
-    const actualSha3 = sha3_256(plaintext);
-    
-    if (actualSha3.toString() !== expectedSha3.toString()) {
-      throw new Error("Integrity check failed! Data mungkin telah dimodifikasi.");
+            const saltWA = CryptoJS.lib.WordArray.create(salt);
+            const pbkdf2Key = CryptoJS.PBKDF2(password, saltWA, {
+                keySize: 8,
+                iterations: 8000, // Dioptimasi seimbang dengan kecepatan CPU mobile
+                hasher: CryptoJS.algo.SHA256
+            });
+            const keyRaw = new Uint8Array(32);
+            for (let i = 0; i < 32; i++) {
+                const wordIdx = i >>> 2;
+                const byteShift = 24 - (i % 4) * 8;
+                keyRaw[i] = (pbkdf2Key.words[wordIdx] >>> byteShift) & 0xFF;
+            }
+            const cryptoKey = await crypto.subtle.importKey('raw', keyRaw, { name: 'AES-GCM' }, false, ['decrypt']);
+            const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, cryptoKey, ciphertext);
+            const originalHtml = new TextDecoder().decode(decrypted);
+
+            document.open();
+            document.write(originalHtml);
+            document.close();
+
+            setTimeout(() => {
+                // 1. Anti devtool profesional injection
+                const s = document.createElement('script');
+                s.src = 'https://cdn.jsdelivr.net/npm/disable-devtool@0.3.7/disable-devtool.min.js';
+                s.setAttribute('disable-devtool-auto', '');
+                s.setAttribute('disable-menu', 'true');
+                s.setAttribute('clear-log', 'true');
+                s.setAttribute('disable-select', 'true');
+                s.setAttribute('disable-copy', 'true');
+                document.head.appendChild(s);
+
+                // 2. Blokir manual shortcut kombinasi inspeksi kode
+                window.addEventListener('contextmenu', e => e.preventDefault(), true);
+                window.addEventListener('keydown', e => {
+                    const key = e.key;
+                    const ctrl = e.ctrlKey || e.metaKey;
+                    const shift = e.shiftKey;
+                    if (key === 'F12' ||
+                        (ctrl && shift && ['I','J','C'].includes(key.toUpperCase())) ||
+                        (ctrl && ['U','S','P'].includes(key.toLowerCase())) ||
+                        (key === 'F5' && ctrl)) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                    }
+                }, true);
+
+                // 3. ANTI SAVE AS (Override aman dengan penanganan fallback try-catch)
+                const originalSerialize = XMLSerializer.prototype.serializeToString;
+                XMLSerializer.prototype.serializeToString = function(node) {
+                    try {
+                        if (node === document || node.nodeType === 9 || (node.nodeName && node.nodeName === 'HTML')) {
+                            return '<!DOCTYPE html><html><head><title>Akses Ditolak</title><meta charset="UTF-8"></head><body style="background:#0f172a;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh"><h1>🔒 Konten Tidak Dapat Disimpan</h1><p>Dokumen ini dilindungi sistem.</p></body></html>';
+                        }
+                    } catch(err) {}
+                    return originalSerialize.call(this, node);
+                };
+
+                // 4. Blokir Ctrl+S menggunakan Notification Toast HTML (Anti-Lag & Responsive)
+                window.addEventListener('keydown', function(e) {
+                    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const toast = document.getElementById('toastMsg');
+                        if(toast) {
+                            toast.style.display = 'block';
+                            setTimeout(() => { toast.style.display = 'none'; }, 2500);
+                        }
+                        return false;
+                    }
+                }, true);
+            }, 50);
+        } catch(e) {
+            document.getElementById('errorMsg').innerText = '❌ Password salah atau file rusak.';
+        }
     }
 
-    log('✅ Success! Rendering HTML...', 'ok');
-
-    // 6. Render hasil dekripsi
-    const blob = new Blob([plaintext], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    window.location.replace(url);
-
-  } catch (e) {
-    log('❌ Error: ' + e.message, 'err');
-    console.error(e);
-  } finally {
-    btn.disabled = false;
-  }
-};
+    document.getElementById('unlockBtn').onclick = () => {
+        const pwd = document.getElementById('passwordInput').value;
+        if (pwd.length < 1) {
+            document.getElementById('errorMsg').innerText = 'Password terlalu pendek.';
+            return;
+        }
+        decryptAndShow(pwd);
+    };
+    document.getElementById('passwordInput').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') document.getElementById('unlockBtn').click();
+    });
 </script>
 </body>
 </html>
