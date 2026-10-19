@@ -215,6 +215,21 @@
             access: 'Umum',
             loader: 'v8',
             rilis: '2026-09-19'
+        },
+		{
+            nama: 'emas-newversion.wasm',
+            link: 'https://wlmyaps.github.io/wasm/list/emas-newversion.wasm',
+            fungsi: 'Perbaikan cara perhitungan kumulatif pada versi emas-analis.wasm menjadi akurat',
+            access: 'Umum',
+            loader: 'v8',
+            rilis: '2026-10-05'
+        },{
+            nama: 'Saham-Kurs-Emas.wasm',
+            link: 'https://williamyaps.github.io/wasm/list/Saham-Kurs-Emas.wasm',
+            fungsi: 'Animasi Elite 3D Saham Kurs dan Emas',
+            access: 'Umum',
+            loader: 'v8',
+            rilis: '2026-10-19'
         }];
 
         let sortConfig = { key: null, direction: 'asc' };
@@ -370,8 +385,8 @@
 
         document.addEventListener('DOMContentLoaded', function() {
             searchClear.classList.add('hidden');
-            sortConfig.key = 'nama';
-            sortConfig.direction = 'asc';
+            sortConfig.key = 'rilis';
+            sortConfig.direction = 'desc';
             renderTable('', sortConfig.key, sortConfig.direction);
         });
     </script>
